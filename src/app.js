@@ -3,13 +3,15 @@ import {
   cloneAccounts,
   cloneEmployees,
   createSyncedAccounts,
-} from './mockData.js';
+} from './mockData.js?v=20260715-nav5';
 import {
   drawQr,
   drawQrCanvases,
   getSelectorCandidates,
   renderPage,
-} from './components.js';
+} from './components.js?v=20260715-nav5';
+import { cloneMassTasks, getTaskStatus } from './massTaskData.js?v=20260716-mock1';
+import { renderMassTaskPage } from './massTaskComponents.js?v=20260716-mock1';
 
 const TODAY = '2026-07-09';
 
@@ -35,6 +37,26 @@ const state = {
   toast: '',
 };
 
+
+const massState = {
+  tasks: cloneMassTasks(),
+  filters: { name: '', start: '', end: '', employee: '', source: 'all' },
+  statusFilter: 'all',
+  pagination: { page: 1, pageSize: 20 },
+  drawer: { open: false, taskId: '', tab: 'employees' },
+  employeeFilters: { keyword: '' },
+  employeePagination: { page: 1, pageSize: 20 },
+  contentDrawer: { open: false, taskId: '', preview: null },
+  customerFilters: { keyword: '', employeeKeyword: '', status: 'all', employeeId: '' },
+  customerPagination: { page: 1, pageSize: 20 },
+  remindModal: { open: false, employeeId: '' },
+  toast: '',
+  lastSyncAt: '2026-07-14 11:32:08',
+  isSyncing: false,
+};
+
+let navExpanded = false;
+
 const app = document.querySelector('#app');
 
 render();
@@ -46,6 +68,32 @@ document.addEventListener('click', (event) => {
   if (action !== 'close-drawer') event.stopPropagation();
 
   const handlers = {
+    'navigate-page': () => navigatePage(target.dataset.page),
+    'toggle-navigation': toggleNavigation,
+    'mass-search': applyMassSearch,
+    'mass-reset': resetMassSearch,
+    'mass-status-filter': () => setMassStatusFilter(target.dataset.status),
+    'mass-page': () => setMassPage(Number(target.dataset.page)),
+    'mass-sync': syncMassTasks,
+    'mass-detail': () => openMassDetail(target.dataset.id),
+    'mass-content': () => openMassContent(target.dataset.id),
+    'mass-content-close': closeMassContent,
+    'mass-media-preview': () => openMassMediaPreview(target.dataset.kind, target.dataset.url, target.dataset.mime),
+    'mass-media-preview-close': closeMassMediaPreview,
+    'mass-file-preview': () => showMassToast('当前文件暂不支持预览'),
+    'mass-close': closeMassDetail,
+    'mass-detail-tab': () => setMassDetailTab(target.dataset.tab),
+    'mass-employee-detail': () => openEmployeeDetail(target.dataset.id),
+    'mass-customer-search': applyMassCustomerSearch,
+    'mass-customer-reset': resetMassCustomerSearch,
+    'mass-customer-status': () => setMassCustomerStatus(target.dataset.status),
+    'mass-customer-page': () => setMassCustomerPage(Number(target.dataset.page)),
+    'mass-employee-search': applyMassEmployeeSearch,
+    'mass-employee-reset': resetMassEmployeeSearch,
+    'mass-employee-page': () => setMassEmployeePage(Number(target.dataset.page)),
+    'mass-employee-remind': () => openMassEmployeeReminder(target.dataset.id),
+    'mass-remind-cancel': closeMassEmployeeReminder,
+    'mass-remind-confirm': confirmMassEmployeeReminder,
     search: applySearch,
     'reset-search': resetSearch,
     'open-add-account': openAddAccount,
@@ -90,6 +138,28 @@ document.addEventListener('change', (event) => {
     toggleCandidate(target.dataset.employeeId, target.checked);
     return;
   }
+  if (target.dataset.action === 'mass-page-size') {
+    massState.pagination.pageSize = Number(target.value) || 20;
+    massState.pagination.page = 1;
+    render();
+    return;
+  }
+  if (target.dataset.action === 'mass-source-filter') {
+    applyMassSearch();
+    return;
+  }
+  if (target.dataset.action === 'mass-employee-page-size') {
+    massState.employeePagination.pageSize = Number(target.value) || 20;
+    massState.employeePagination.page = 1;
+    render();
+    return;
+  }
+  if (target.dataset.action === 'mass-customer-page-size') {
+    massState.customerPagination.pageSize = Number(target.value) || 20;
+    massState.customerPagination.page = 1;
+    render();
+    return;
+  }
   if (target.id === 'account-form-avatar' && target.files?.[0]) {
     readAvatarFile(target.files[0]);
   }
@@ -109,9 +179,14 @@ document.addEventListener('input', (event) => {
 });
 
 function render(focus = null) {
+  if (currentPage() === 'mass-tasks') {
+    app.innerHTML = renderMassTaskPage({ ...massState, navExpanded, ...getMassTaskView(), ...getMassEmployeeView(), ...getMassCustomerView() });
+    return;
+  }
   const filteredAccounts = getFilteredAccounts();
   app.innerHTML = renderPage({
     ...state,
+    navExpanded,
     filteredAccounts,
   });
   drawQrCanvases(document);
@@ -123,6 +198,174 @@ function render(focus = null) {
     }
   }
 }
+
+function currentPage() {
+  return window.location.hash === '#mass-tasks' ? 'mass-tasks' : 'accounts';
+}
+
+function navigatePage(page) {
+  window.location.hash = page === 'mass-tasks' ? 'mass-tasks' : 'accounts';
+  massState.drawer.open = false;
+  massState.contentDrawer = { open: false, taskId: '', preview: null };
+  massState.remindModal = { open: false, employeeId: '' };
+  state.drawer.open = false;
+  render();
+}
+
+function toggleNavigation() {
+  navExpanded = !navExpanded;
+  render();
+}
+
+
+function getMassTaskQueryResults() {
+  const { name, start, end, employee, source } = massState.filters;
+  const startAt = start ? `${start} 00:00:00` : '';
+  const endAt = end ? `${end} 23:59:59` : '';
+  return massState.tasks.filter((task) =>
+    (!name || task.name.includes(name)) &&
+    (!startAt || task.createdAt >= startAt) &&
+    (!endAt || task.createdAt <= endAt) &&
+    (!source || source === 'all' || task.source === source) &&
+    (!employee || task.employees.some((item) => item.name.includes(employee) || item.crmName?.includes(employee)))
+  );
+}
+
+function getMassTaskView() {
+  const queryResults = getMassTaskQueryResults();
+  const statusCounts = { all: queryResults.length, pending: 0, running: 0, completed: 0 };
+  queryResults.forEach((task) => { statusCounts[getTaskStatus(task)] += 1; });
+  const statusResults = massState.statusFilter === 'all' ? queryResults : queryResults.filter((task) => getTaskStatus(task) === massState.statusFilter);
+  const total = statusResults.length;
+  const totalPages = Math.max(1, Math.ceil(total / massState.pagination.pageSize));
+  massState.pagination.page = Math.min(massState.pagination.page, totalPages);
+  const start = (massState.pagination.page - 1) * massState.pagination.pageSize;
+  return { filteredTasks: statusResults.slice(start, start + massState.pagination.pageSize), statusCounts, total, totalPages };
+}
+
+function getMassEmployeeView() {
+  const task = massState.drawer.open ? massState.tasks.find((item) => item.id === massState.drawer.taskId) : null;
+  if (!task) return { filteredEmployees: [], employeeTotal: 0, employeeTotalPages: 1 };
+  const keyword = massState.employeeFilters.keyword.trim();
+  const matches = task.employees.filter((employee) => !keyword || employee.name.includes(keyword) || employee.crmName?.includes(keyword));
+  const employeeTotal = matches.length;
+  const employeeTotalPages = Math.max(1, Math.ceil(employeeTotal / massState.employeePagination.pageSize));
+  massState.employeePagination.page = Math.min(massState.employeePagination.page, employeeTotalPages);
+  const start = (massState.employeePagination.page - 1) * massState.employeePagination.pageSize;
+  return { filteredEmployees: matches.slice(start, start + massState.employeePagination.pageSize), employeeTotal, employeeTotalPages };
+}
+
+function getMassCustomerView() {
+  const task = massState.drawer.open ? massState.tasks.find((item) => item.id === massState.drawer.taskId) : null;
+  if (!task) return { filteredCustomers: [], customerStatusCounts: { all: 0, pending: 0, sent: 0, failed: 0 }, customerTotal: 0, customerTotalPages: 1, customerRecordTotal: 0, selectedCustomerEmployee: null };
+  const records = getTaskCustomerRecords(task);
+  const selectedCustomerEmployee = massState.customerFilters.employeeId ? task.employees.find((item) => item.id === massState.customerFilters.employeeId) || null : null;
+  const keyword = massState.customerFilters.keyword.trim();
+  const employeeKeyword = massState.customerFilters.employeeKeyword.trim();
+  const employeeResults = selectedCustomerEmployee
+    ? records.filter((customer) => customer.employeeId === selectedCustomerEmployee.id)
+    : records.filter((customer) => !employeeKeyword || customer.employeeName.includes(employeeKeyword) || customer.employeeCrmName?.includes(employeeKeyword));
+  const searchResults = employeeResults.filter((customer) => !keyword || customer.crmName?.includes(keyword) || customer.wecomName.includes(keyword) || customer.nickname?.includes(keyword) || customer.remarkName?.includes(keyword));
+  const customerStatusCounts = { all: searchResults.length, pending: 0, sent: 0, failed: 0 };
+  searchResults.forEach((customer) => { customerStatusCounts[customer.status] += 1; });
+  const statusResults = massState.customerFilters.status === 'all' ? searchResults : searchResults.filter((customer) => customer.status === massState.customerFilters.status);
+  const customerTotal = statusResults.length;
+  const customerTotalPages = Math.max(1, Math.ceil(customerTotal / massState.customerPagination.pageSize));
+  massState.customerPagination.page = Math.min(massState.customerPagination.page, customerTotalPages);
+  const start = (massState.customerPagination.page - 1) * massState.customerPagination.pageSize;
+  return { filteredCustomers: statusResults.slice(start, start + massState.customerPagination.pageSize), customerStatusCounts, customerTotal, customerTotalPages, customerRecordTotal: records.length, selectedCustomerEmployee };
+}
+
+function getTaskCustomerRecords(task) {
+  if (task.customerRecords) return task.customerRecords;
+  const seedRecords = task.employees.flatMap((employee) => employee.customerDetails.map((customer, index) => ({
+    ...customer,
+    id: `${employee.id}-customer-${index}`,
+    employeeId: employee.id,
+    employeeName: employee.name,
+    employeeCrmName: employee.crmName,
+    employeeColor: employee.color,
+  })));
+  const baseCounts = { pending: 0, sent: 0, failed: 0 };
+  seedRecords.forEach((customer) => { baseCounts[customer.status] += 1; });
+  const desiredFailed = Math.max(task.failed, baseCounts.failed);
+  const desiredPending = Math.max(task.pending, baseCounts.pending);
+  const desiredSent = Math.max(baseCounts.sent, task.expected - desiredFailed - desiredPending);
+  const remaining = {
+    sent: Math.max(desiredSent - baseCounts.sent, 0),
+    failed: Math.max(desiredFailed - baseCounts.failed, 0),
+    pending: Math.max(desiredPending - baseCounts.pending, 0),
+  };
+  const records = [...seedRecords];
+  let sequence = 0;
+  while (records.length < task.expected) {
+    const status = ['sent', 'pending', 'failed'].find((value) => remaining[value] > 0) || 'sent';
+    const template = seedRecords[sequence % seedRecords.length];
+    const serial = String(sequence + 1).padStart(4, '0');
+    records.push({
+      ...template,
+      id: `${task.id}-generated-${serial}`,
+      wecomName: `${template.wecomName}-${serial}`,
+      crmName: template.crmName ? `${template.crmName}-${serial}` : null,
+      status,
+      sentAt: status === 'pending' ? null : (template.sentAt || task.updatedAt),
+      failureReason: status === 'failed' ? '因客户不是好友导致发送失败' : '',
+    });
+    if (remaining[status] > 0) remaining[status] -= 1;
+    sequence += 1;
+  }
+  task.customerRecords = records.slice(0, task.expected);
+  return task.customerRecords;
+}
+
+function applyMassSearch() {
+  massState.filters = { name: readField('mass-name').trim(), start: readField('mass-start'), end: readField('mass-end'), employee: readField('mass-employee').trim(), source: readField('mass-source') || 'all' };
+  massState.pagination.page = 1;
+  render();
+}
+
+function resetMassSearch() {
+  massState.filters = { name: '', start: '', end: '', employee: '', source: 'all' };
+  massState.statusFilter = 'all';
+  massState.pagination.page = 1;
+  render();
+}
+
+function setMassStatusFilter(status) { massState.statusFilter = status || 'all'; massState.pagination.page = 1; render(); }
+function setMassPage(page) { if (!Number.isFinite(page) || page < 1) return; massState.pagination.page = page; render(); }
+
+function syncMassTasks() {
+  if (massState.isSyncing) return;
+  massState.isSyncing = true;
+  render();
+  window.setTimeout(() => {
+    massState.lastSyncAt = '2026-07-14 12:06:32';
+    massState.isSyncing = false;
+    render();
+  }, 700);
+}
+
+function openMassDetail(id) { massState.drawer = { open: true, taskId: id, tab: 'employees' }; massState.employeeFilters = { keyword: '' }; massState.employeePagination = { page: 1, pageSize: 20 }; massState.customerFilters = { keyword: '', employeeKeyword: '', status: 'all', employeeId: '' }; massState.customerPagination = { page: 1, pageSize: 20 }; massState.remindModal = { open: false, employeeId: '' }; render(); }
+function closeMassDetail(event) { if (event?.target?.classList?.contains('mass-drawer')) return; massState.drawer.open = false; massState.remindModal = { open: false, employeeId: '' }; render(); }
+function setMassDetailTab(tab) { massState.drawer.tab = tab === 'customers' ? 'customers' : 'employees'; render(); }
+function openEmployeeDetail(id) { const task = massState.tasks.find((item) => item.id === massState.drawer.taskId); const employee = task?.employees.find((item) => item.id === id); massState.drawer.tab = 'customers'; massState.customerFilters.employeeId = id; massState.customerFilters.employeeKeyword = employee?.name || ''; massState.customerPagination.page = 1; massState.remindModal = { open: false, employeeId: '' }; render(); }
+function openMassContent(id) { massState.contentDrawer = { open: true, taskId: id, preview: null }; render(); }
+function closeMassContent() { massState.contentDrawer = { open: false, taskId: '', preview: null }; render(); }
+function openMassMediaPreview(kind, url, mime = '') { if (!url) return; massState.contentDrawer.preview = { kind, url, mime }; render(); }
+function closeMassMediaPreview() { massState.contentDrawer.preview = null; render(); }
+function applyMassEmployeeSearch() { massState.employeeFilters.keyword = readField('mass-employee-detail-search').trim(); massState.employeePagination.page = 1; render(); }
+function resetMassEmployeeSearch() { massState.employeeFilters.keyword = ''; massState.employeePagination.page = 1; render(); }
+function setMassEmployeePage(page) { if (!Number.isFinite(page) || page < 1) return; massState.employeePagination.page = page; render(); }
+function openMassEmployeeReminder(employeeId) { massState.remindModal = { open: true, employeeId }; render(); }
+function closeMassEmployeeReminder() { massState.remindModal = { open: false, employeeId: '' }; render(); }
+function confirmMassEmployeeReminder() { massState.remindModal = { open: false, employeeId: '' }; showMassToast('提醒已发送。'); }
+function showMassToast(message) { massState.toast = message; render(); window.clearTimeout(showMassToast.timer); showMassToast.timer = window.setTimeout(() => { massState.toast = ''; render(); }, 2200); }
+function applyMassCustomerSearch() { massState.customerFilters.keyword = readField('mass-customer-search').trim(); massState.customerFilters.employeeKeyword = readField('mass-customer-employee-search').trim(); massState.customerFilters.employeeId = ''; massState.customerPagination.page = 1; render(); }
+function resetMassCustomerSearch() { massState.customerFilters = { keyword: '', employeeKeyword: '', status: 'all', employeeId: '' }; massState.customerPagination.page = 1; render(); }
+function setMassCustomerStatus(status) { massState.customerFilters.status = status || 'all'; massState.customerPagination.page = 1; render(); }
+function setMassCustomerPage(page) { if (!Number.isFinite(page) || page < 1) return; massState.customerPagination.page = page; render(); }
+
+window.addEventListener('hashchange', render);
 
 function getFilteredAccounts() {
   const employeeMap = new Map(state.employees.map((employee) => [employee.id, employee]));

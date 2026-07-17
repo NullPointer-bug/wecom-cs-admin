@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
+  <rect width="720" height="420" fill="#edfafa"/>
+  <rect x="70" y="62" width="580" height="296" rx="24" fill="#fff" stroke="#cdebea" stroke-width="3"/>
+  <circle cx="190" cy="190" r="72" fill="#27c4c8" opacity=".16"/>
+  <path d="M151 190h78M190 151v78" stroke="#13a8ad" stroke-width="18" stroke-linecap="round"/>
+  <text x="305" y="177" fill="#273640" font-family="Arial, sans-serif" font-size="38" font-weight="700">会员服务指南</text>
+  <text x="305" y="232" fill="#71808c" font-family="Arial, sans-serif" font-size="24">续费权益与专属服务说明</text>
+</svg>

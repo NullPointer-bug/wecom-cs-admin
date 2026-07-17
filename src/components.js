@@ -1,4 +1,4 @@
-import { departments } from './mockData.js';
+import { departments } from './mockData.js?v=20260715-nav5';
 
 export function renderPage(ctx) {
   const {
@@ -16,8 +16,8 @@ export function renderPage(ctx) {
   const activeAccount = drawer.open ? accounts.find((item) => item.id === drawer.accountId) : null;
 
   return `
-    <div class="app-shell">
-      ${renderSidebar()}
+    <div class="app-shell ${ctx.navExpanded ? 'nav-expanded' : 'nav-collapsed'}">
+      ${renderSidebar('accounts', ctx.navExpanded)}
       <main class="main-panel">
         <section class="page-head">
           <div>
@@ -485,7 +485,7 @@ function renderQrModal(modal) {
   `;
 }
 
-function renderSidebar() {
+export function renderSidebar(activePage = 'accounts', expanded = false) {
   const sections = [
     ['首页', ['工作台']],
     ['市场', ['活动线索', '客户池']],
@@ -494,16 +494,16 @@ function renderSidebar() {
   ];
   return `
     <aside class="side-rail">
-      ${sections.map(([name]) => `<div class="rail-item ${name === '企微' ? 'active' : ''}"><span></span>${name}</div>`).join('')}
+      ${!expanded ? '<button class="nav-toggle collapsed-toggle" data-action="toggle-navigation" aria-label="展开菜单">›</button>' : ''}
+      ${sections.map(([name]) => `<div class="rail-item ${name === '企微' ? 'active' : ''}"><span class="rail-icon"></span><b>${name}</b></div>`).join('')}
     </aside>
-    <aside class="sub-nav">
+    <aside class="sub-nav ${expanded ? 'expanded' : ''}">
+      ${expanded ? '<button class="nav-toggle expanded-toggle" data-action="toggle-navigation" aria-label="收起菜单">‹</button>' : ''}
       <div class="sub-nav-title">企微管理</div>
       <a>企微客户群</a>
-      <a class="active">企微客服账号管理</a>
-      <a>企微群发</a>
-      <a>会话内容监测</a>
-      <a>分配记录</a>
-      <a>朋友圈管理</a>
+      <a class="${activePage === 'accounts' ? 'active' : ''}" href="#accounts" data-action="navigate-page" data-page="accounts">企微客服账号管理</a>
+      <a class="${activePage === 'mass-tasks' ? 'active' : ''}" href="#mass-tasks" data-action="navigate-page" data-page="mass-tasks">企微群发任务管理</a>
+      <a>会话内容监测</a><a>分配记录</a><a>朋友圈管理</a>
       <div class="sub-nav-title muted-title">企微客服排班</div>
       <a>排班列表</a>
     </aside>

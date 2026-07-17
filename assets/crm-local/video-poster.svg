@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#26343e"/>
+  <circle cx="480" cy="270" r="78" fill="#27c4c8"/>
+  <path d="m458 224 70 46-70 46z" fill="#fff"/>
+  <text x="480" y="420" text-anchor="middle" fill="#d9e7e8" font-family="Arial, sans-serif" font-size="30">会员服务说明视频</text>
+</svg>
