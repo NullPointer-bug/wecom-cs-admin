@@ -266,6 +266,7 @@ th.sticky-action { background: #f6f7f8; z-index: 3; }
 .customer-query-row label { min-width: 0; display: grid; gap: 7px; color: #52606c; font-size: 13px; }
 .customer-query-actions { display: flex; align-items: center; gap: 8px; }
 .customer-filter-row { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.employee-filter-row { display: flex; align-items: center; margin: 2px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .customer-status-tabs { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .customer-detail-table { min-width: 1430px; }
 .customer-cell { display: flex; align-items: center; gap: 9px; white-space: nowrap; }

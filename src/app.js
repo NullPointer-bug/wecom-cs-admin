@@ -44,7 +44,7 @@ const massState = {
   statusFilter: 'all',
   pagination: { page: 1, pageSize: 20 },
   drawer: { open: false, taskId: '', tab: 'employees' },
-  employeeFilters: { keyword: '' },
+  employeeFilters: { keyword: '', status: 'all' },
   employeePagination: { page: 1, pageSize: 20 },
   contentDrawer: { open: false, taskId: '', preview: null },
   customerFilters: { keyword: '', employeeKeyword: '', status: 'all', employeeId: '' },
@@ -90,6 +90,7 @@ document.addEventListener('click', (event) => {
     'mass-customer-page': () => setMassCustomerPage(Number(target.dataset.page)),
     'mass-employee-search': applyMassEmployeeSearch,
     'mass-employee-reset': resetMassEmployeeSearch,
+    'mass-employee-status': () => setMassEmployeeStatus(target.dataset.status),
     'mass-employee-page': () => setMassEmployeePage(Number(target.dataset.page)),
     'mass-employee-remind': () => openMassEmployeeReminder(target.dataset.id),
     'mass-remind-cancel': closeMassEmployeeReminder,
@@ -245,14 +246,19 @@ function getMassTaskView() {
 
 function getMassEmployeeView() {
   const task = massState.drawer.open ? massState.tasks.find((item) => item.id === massState.drawer.taskId) : null;
-  if (!task) return { filteredEmployees: [], employeeTotal: 0, employeeTotalPages: 1 };
+  if (!task) return { filteredEmployees: [], employeeStatusCounts: { all: 0, pending: 0, running: 0, completed: 0 }, employeeTotal: 0, employeeTotalPages: 1 };
   const keyword = massState.employeeFilters.keyword.trim();
   const matches = task.employees.filter((employee) => !keyword || employee.name.includes(keyword) || employee.crmName?.includes(keyword));
-  const employeeTotal = matches.length;
+  const employeeStatusCounts = { all: matches.length, pending: 0, running: 0, completed: 0 };
+  matches.forEach((employee) => { employeeStatusCounts[getTaskStatus(employee)] += 1; });
+  const statusMatches = massState.employeeFilters.status === 'all'
+    ? matches
+    : matches.filter((employee) => getTaskStatus(employee) === massState.employeeFilters.status);
+  const employeeTotal = statusMatches.length;
   const employeeTotalPages = Math.max(1, Math.ceil(employeeTotal / massState.employeePagination.pageSize));
   massState.employeePagination.page = Math.min(massState.employeePagination.page, employeeTotalPages);
   const start = (massState.employeePagination.page - 1) * massState.employeePagination.pageSize;
-  return { filteredEmployees: matches.slice(start, start + massState.employeePagination.pageSize), employeeTotal, employeeTotalPages };
+  return { filteredEmployees: statusMatches.slice(start, start + massState.employeePagination.pageSize), employeeStatusCounts, employeeTotal, employeeTotalPages };
 }
 
 function getMassCustomerView() {
@@ -345,7 +351,7 @@ function syncMassTasks() {
   }, 700);
 }
 
-function openMassDetail(id) { massState.drawer = { open: true, taskId: id, tab: 'employees' }; massState.employeeFilters = { keyword: '' }; massState.employeePagination = { page: 1, pageSize: 20 }; massState.customerFilters = { keyword: '', employeeKeyword: '', status: 'all', employeeId: '' }; massState.customerPagination = { page: 1, pageSize: 20 }; massState.remindModal = { open: false, employeeId: '' }; render(); }
+function openMassDetail(id) { massState.drawer = { open: true, taskId: id, tab: 'employees' }; massState.employeeFilters = { keyword: '', status: 'all' }; massState.employeePagination = { page: 1, pageSize: 20 }; massState.customerFilters = { keyword: '', employeeKeyword: '', status: 'all', employeeId: '' }; massState.customerPagination = { page: 1, pageSize: 20 }; massState.remindModal = { open: false, employeeId: '' }; render(); }
 function closeMassDetail(event) { if (event?.target?.classList?.contains('mass-drawer')) return; massState.drawer.open = false; massState.remindModal = { open: false, employeeId: '' }; render(); }
 function setMassDetailTab(tab) { massState.drawer.tab = tab === 'customers' ? 'customers' : 'employees'; render(); }
 function openEmployeeDetail(id) { const task = massState.tasks.find((item) => item.id === massState.drawer.taskId); const employee = task?.employees.find((item) => item.id === id); massState.drawer.tab = 'customers'; massState.customerFilters.employeeId = id; massState.customerFilters.employeeKeyword = employee?.name || ''; massState.customerPagination.page = 1; massState.remindModal = { open: false, employeeId: '' }; render(); }
@@ -354,7 +360,8 @@ function closeMassContent() { massState.contentDrawer = { open: false, taskId: '
 function openMassMediaPreview(kind, url, mime = '') { if (!url) return; massState.contentDrawer.preview = { kind, url, mime }; render(); }
 function closeMassMediaPreview() { massState.contentDrawer.preview = null; render(); }
 function applyMassEmployeeSearch() { massState.employeeFilters.keyword = readField('mass-employee-detail-search').trim(); massState.employeePagination.page = 1; render(); }
-function resetMassEmployeeSearch() { massState.employeeFilters.keyword = ''; massState.employeePagination.page = 1; render(); }
+function resetMassEmployeeSearch() { massState.employeeFilters = { keyword: '', status: 'all' }; massState.employeePagination.page = 1; render(); }
+function setMassEmployeeStatus(status) { massState.employeeFilters.status = status || 'all'; massState.employeePagination.page = 1; render(); }
 function setMassEmployeePage(page) { if (!Number.isFinite(page) || page < 1) return; massState.employeePagination.page = page; render(); }
 function openMassEmployeeReminder(employeeId) { massState.remindModal = { open: true, employeeId }; render(); }
 function closeMassEmployeeReminder() { massState.remindModal = { open: false, employeeId: '' }; render(); }
